@@ -5,6 +5,7 @@ from app.core.dependencies import get_current_user
 from app.models.user import User, UserRole
 from contextlib import asynccontextmanager
 from app.core.logging_config import setup_logging
+from app.celery_tasks.celery_app import celery_app
 import logging
 
 setup_logging()
