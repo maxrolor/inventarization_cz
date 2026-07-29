@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Вход для клиентов{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white text-center">
+                <h4><i class="bi bi-person"></i> Вход для клиентов</h4>
+            </div>
+            <div class="card-body">
+                <form id="clientLoginForm" autocomplete="off">
+                    <div class="mb-3">
+                        <label for="inn" class="form-label">ИНН</label>
+                        <input type="text" class="form-control" id="inn" name="inn"
+                               placeholder="Введите ИНН" autocomplete="off" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Пароль</label>
+                        <input type="password" class="form-control" id="password" name="password"
+                               placeholder="Введите пароль" autocomplete="new-password" required>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="bi bi-box-arrow-in-right"></i> Войти
+                    </button>
+                </form>
+                <div id="messageContainer" class="mt-3"></div>
+                <hr>
+                <div class="text-center">
+                    <p>Нет аккаунта? <a href="/client/register">Зарегистрироваться</a></p>
+                    <p><a href="/pages/forgot-password">Забыли пароль?</a></p>
+                </div>
+                <div class="text-center mt-2">
+                    <a href="/">На главную</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('clientLoginForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const inn = document.getElementById('inn').value.trim();
+    const password = document.getElementById('password').value;
+    const msgContainer = document.getElementById('messageContainer');
+
+    msgContainer.innerHTML = `<div class="alert alert-info alert-dismissible fade show" role="alert">
+        <i class="bi bi-hourglass-split me-2"></i> Проверка...
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>`;
+
+    try {
+        const response = await fetch('/client/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ inn, password })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            document.cookie = `access_token=${data.access_token}; path=/; max-age=${60*60*24}`;
+            msgContainer.innerHTML = `<div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="bi bi-check-circle-fill me-2"></i> Вход выполнен! Перенаправление...
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>`;
+            setTimeout(() => {
+                window.location.href = '/client/profile';
+            }, 1000);
+        } else {
+            const detail = data.detail || 'Ошибка';
+            msgContainer.innerHTML = `<div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i> ${detail}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>`;
+        }
+    } catch (error) {
+        msgContainer.innerHTML = `<div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-wifi-off me-2"></i> Ошибка соединения. Проверьте сеть.
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>`;
+    }
+});
+</script>
+{% endblock %}

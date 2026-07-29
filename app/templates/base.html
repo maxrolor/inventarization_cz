@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Инвентаризация Честный ЗНАК{% endblock %}</title>
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body {
+            padding-top: 60px;
+            background-color: #f8f9fa;
+        }
+        .navbar-brand {
+            font-weight: bold;
+            color: #fff !important;
+        }
+        .navbar-brand i {
+            margin-right: 8px;
+        }
+        .table-actions {
+            white-space: nowrap;
+        }
+        .table-actions .btn {
+            margin: 0 2px;
+        }
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .card-header {
+            border-radius: 10px 10px 0 0 !important;
+        }
+        .badge {
+            font-size: 0.85rem;
+            padding: 5px 10px;
+        }
+        .footer {
+            margin-top: 50px;
+            padding: 20px 0;
+            background-color: #fff;
+            border-top: 1px solid #dee2e6;
+            text-align: center;
+            color: #6c757d;
+        }
+        .nav-link i {
+            margin-right: 5px;
+        }
+        .dropdown-menu {
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .avatar-circle {
+            width: 32px;
+            height: 32px;
+            background-color: #0d6efd;
+            color: white;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .admin-sidebar {
+            background-color: #f8f9fa;
+            border-right: 1px solid #dee2e6;
+            min-height: 100%;
+            padding: 20px 0;
+        }
+        .admin-sidebar .nav-link {
+            color: #495057;
+            border-radius: 0;
+            padding: 10px 20px;
+        }
+        .admin-sidebar .nav-link:hover {
+            background-color: #e9ecef;
+        }
+        .admin-sidebar .nav-link.active {
+            background-color: #0d6efd;
+            color: white;
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Навигационная панель -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-boxes"></i> ЧЗ Инвентаризация
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <!-- Ссылка на главную -->
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">
+                            <i class="bi bi-house"></i> Главная
+                        </a>
+                    </li>
+                    <!-- Показываем профиль только если пользователь авторизован -->
+                    {% if request.cookies.get("access_token") %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="/profile">
+                                <i class="bi bi-person-badge"></i> Профиль
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+                <ul class="navbar-nav">
+                    {% if request.cookies.get("access_token") %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
+                            <span class="avatar-circle">U</span>
+                            <span class="d-none d-md-inline">Профиль</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="/profile">
+                                <i class="bi bi-person-badge"></i> Профиль
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="/auth/logout">
+                                <i class="bi bi-box-arrow-right"></i> Выход
+                            </a></li>
+                        </ul>
+                    </li>
+                    {% else %}
+                        <!-- Для неавторизованных – только ссылки на вход/регистрацию -->
+                        <li class="nav-item">
+                            <a class="nav-link" href="/client/login">
+                                <i class="bi bi-box-arrow-in-right"></i> Вход
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/client/register">
+                                <i class="bi bi-person-plus"></i> Регистрация
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Основное содержимое -->
+    <div class="container mt-4">
+        {% if messages %}
+            {% for message in messages %}
+            <div class="alert alert-{{ message.type }} alert-dismissible fade show" role="alert">
+                {{ message.text }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Футер -->
+    <footer class="footer">
+        <div class="container">
+            <p class="mb-0">
+                <i class="bi bi-c-circle"></i> 2026 Инвентаризация Честный ЗНАК
+                <span class="mx-3">|</span>
+                <i class="bi bi-github"></i>
+                <a href="#" class="text-decoration-none">Версия 1.0.0</a>
+            </p>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Общие скрипты (без функции logout) -->
+    <script>
+        function getCookie(name) {
+            let value = "; " + document.cookie;
+            let parts = value.split("; " + name + "=");
+            if (parts.length == 2) return parts.pop().split(";").shift();
+        }
+
+        function apiRequest(method, url, data = null) {
+            const options = {
+                method: method,
+                headers: {
+                    "Content-Type": "application/json",
+                }
+            };
+            const token = getCookie("access_token");
+            if (token) {
+                options.headers["Authorization"] = "Bearer " + token;
+            }
+            if (data) options.body = JSON.stringify(data);
+            return fetch(url, options).then(res => {
+                if (res.status === 401) {
+                    window.location.href = "/pages/login";
+                    return;
+                }
+                return res.json();
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const alerts = document.querySelectorAll('.alert-dismissible');
+            alerts.forEach(alert => {
+                setTimeout(() => {
+                    const closeBtn = alert.querySelector('.btn-close');
+                    if (closeBtn) closeBtn.click();
+                }, 5000);
+            });
+        });
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

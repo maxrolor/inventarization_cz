@@ -1,0 +1,36 @@
+# Виртуальное окружение
+venv/
+.venv/
+env/
+.env/
+
+# Кэш Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Логи
+logs/
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Alembic (миграции коммитим, но версии — да, а *.pyc — нет)
+# (версии миграций уже в папке alembic/versions/, их коммитим)
+
+# Файлы настроек с секретами
+.env.local
+.env.production
+
+# Файлы сборки
+dist/
+build/
+*.egg-info/
+
+# Временные файлы
+*.tmp
+*.swp
+*.swo

@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}Личный кабинет{% endblock %}
+
+{% block extra_css %}
+<style>
+    .address-suggestions {
+        position: absolute;
+        z-index: 1000;
+        background: #fff;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        max-height: 200px;
+        overflow-y: auto;
+        width: calc(100% - 38px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        display: none;
+        margin-top: 2px;
+    }
+    .address-suggestions .suggestion-item {
+        padding: 8px 12px;
+        cursor: pointer;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .address-suggestions .suggestion-item:hover {
+        background-color: #f0f0f0;
+    }
+    .address-row {
+        position: relative;
+        margin-bottom: 8px;
+    }
+    .address-row .form-control {
+        padding-right: 40px;
+    }
+    .address-row .btn-outline-danger {
+        position: absolute;
+        right: 0;
+        top: 0;
+        height: 100%;
+        border-radius: 0 4px 4px 0;
+        z-index: 10;
+    }
+    .address-suggestions {
+        top: 100%;
+        left: 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <h1 class="mb-4"><i class="bi bi-person-badge"></i> Мой профиль</h1>
+
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-pencil-square"></i> Редактирование профиля</h5>
+            </div>
+            <div class="card-body">
+                <form id="profileForm">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Наименование</label>
+                        <input type="text" class="form-control" id="name" value="{{ client.name }}" disabled>
+                        <small class="text-muted">Изменить можно только через администратора</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="inn" class="form-label">ИНН</label>
+                        <input type="text" class="form-control" id="inn" value="{{ client.inn }}" disabled>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ceoName" class="form-label">ФИО руководителя/ИП</label>
+                        <input type="text" class="form-control" id="ceoName" value="{{ client.ceo_name or '' }}" disabled>
+                    </div>
+                    <div class="mb-3">
+                        <label for="phone" class="form-label">Телефон</label>
+                        <input type="tel" class="form-control" id="phone" value="{{ client.phone or '' }}">
+                    </div>
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" value="{{ client.email or '' }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Адреса точек</label>
+                        <div id="addressesContainer">
+                            {% for addr in addresses %}
+                            <div class="input-group address-row">
+                                <input type="text" class="form-control address-input" value="{{ addr.address }}" autocomplete="off">
+                                <div class="address-suggestions"></div>
+                                <button class="btn btn-outline-danger" type="button" onclick="removeAddress(this)">✕</button>
+                            </div>
+                            {% endfor %}
+                            {% if not addresses %}
+                            <div class="input-group address-row">
+                                <input type="text" class="form-control address-input" placeholder="Введите адрес" autocomplete="off">
+                                <div class="address-suggestions"></div>
+                                <button class="btn btn-outline-danger" type="button" onclick="removeAddress(this)">✕</button>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <button type="button" class="btn btn-sm btn-secondary mt-2" onclick="addAddress()">+ Добавить адрес</button>
+                        <small class="text-muted d-block">Можно добавить до 10 адресов</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Статус подписки</label>
+                        <div class="alert {% if client.subscription_end_date and client.subscription_end_date >= today %}alert-success{% else %}alert-warning{% endif %}">
+                            {% if client.subscription_end_date %}
+                                Действует до: {{ client.subscription_end_date }}
+                            {% else %}
+                                Не активна
+                            {% endif %}
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Сохранить изменения
+                    </button>
+                </form>
+                <div id="messageContainer" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ---- Управление адресами ----
+function addAddress() {
+    const container = document.getElementById('addressesContainer');
+    if (container.querySelectorAll('.address-row').length >= 10) {
+        alert('Максимум 10 адресов');
+        return;
+    }
+    const row = document.createElement('div');
+    row.className = 'input-group address-row';
+    row.innerHTML = `
+        <input type="text" class="form-control address-input" placeholder="Введите адрес" autocomplete="off">
+        <div class="address-suggestions"></div>
+        <button class="btn btn-outline-danger" type="button" onclick="removeAddress(this)">✕</button>
+    `;
+    container.appendChild(row);
+}
+
+function removeAddress(btn) {
+    const row = btn.closest('.address-row');
+    if (document.querySelectorAll('.address-row').length > 1) {
+        row.remove();
+    } else {
+        alert('Должен быть хотя бы один адрес');
+    }
+}
+
+// ---- Автодополнение адресов ----
+let debounceTimer = null;
+let activeSuggestionIndex = -1;
+
+async function fetchAddressSuggestions(inputElement) {
+    const query = inputElement.value.trim();
+    const container = inputElement.parentElement.querySelector('.address-suggestions');
+    if (!query || query.length < 2) {
+        container.style.display = 'none';
+        return;
+    }
+    try {
+        const response = await fetch(`/client/suggest-address?query=${encodeURIComponent(query)}&count=10`);
+        if (!response.ok) throw new Error('Ошибка загрузки подсказок');
+        const data = await response.json();
+        if (data.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+        container.innerHTML = data.map((item, index) =>
+            `<div class="suggestion-item" data-value="${item.value}" data-index="${index}">${item.value}</div>`
+        ).join('');
+        container.style.display = 'block';
+        container.querySelectorAll('.suggestion-item').forEach(el => {
+            el.addEventListener('click', function() {
+                inputElement.value = this.dataset.value;
+                container.style.display = 'none';
+            });
+        });
+        activeSuggestionIndex = -1;
+        container.querySelectorAll('.suggestion-item').forEach((el, i) => {
+            el.dataset.index = i;
+        });
+    } catch (error) {
+        console.error('Ошибка:', error);
+    }
+}
+
+document.addEventListener('input', function(e) {
+    if (e.target.classList.contains('address-input')) {
+        clearTimeout(debounceTimer);
+        const input = e.target;
+        debounceTimer = setTimeout(() => {
+            fetchAddressSuggestions(input);
+        }, 300);
+    }
+});
+
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.address-row')) {
+        document.querySelectorAll('.address-suggestions').forEach(el => el.style.display = 'none');
+    }
+});
+
+document.addEventListener('keydown', function(e) {
+    const activeInput = document.activeElement;
+    if (!activeInput || !activeInput.classList.contains('address-input')) return;
+    const container = activeInput.parentElement.querySelector('.address-suggestions');
+    if (!container || container.style.display === 'none') return;
+    const items = container.querySelectorAll('.suggestion-item');
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeSuggestionIndex = Math.min(activeSuggestionIndex + 1, items.length - 1);
+        items.forEach((el, i) => {
+            el.style.backgroundColor = i === activeSuggestionIndex ? '#f0f0f0' : '';
+        });
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeSuggestionIndex = Math.max(activeSuggestionIndex - 1, -1);
+        items.forEach((el, i) => {
+            el.style.backgroundColor = i === activeSuggestionIndex ? '#f0f0f0' : '';
+        });
+    } else if (e.key === 'Enter' && activeSuggestionIndex >= 0) {
+        e.preventDefault();
+        const selected = items[activeSuggestionIndex];
+        if (selected) {
+            activeInput.value = selected.dataset.value;
+            container.style.display = 'none';
+        }
+    } else if (e.key === 'Escape') {
+        container.style.display = 'none';
+    }
+});
+
+function getCookie(name) {
+    let value = "; " + document.cookie;
+    let parts = value.split("; " + name + "=");
+    if (parts.length == 2) return parts.pop().split(";").shift();
+}
+
+// ---- Сохранение профиля ----
+document.getElementById('profileForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const phone = document.getElementById('phone').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const addressInputs = document.querySelectorAll('.address-input');
+    const addresses = Array.from(addressInputs).map(inp => inp.value.trim()).filter(a => a);
+
+    if (!email) {
+        alert('Email обязателен');
+        return;
+    }
+    if (addresses.length === 0) {
+        alert('Добавьте хотя бы один адрес');
+        return;
+    }
+
+    const data = { phone, email, addresses };
+    const msgContainer = document.getElementById('messageContainer');
+    msgContainer.innerHTML = '<div class="alert alert-info">Сохранение...</div>';
+
+    try {
+        const response = await fetch('/client/profile', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + getCookie('access_token')
+            },
+            body: JSON.stringify(data)
+        });
+        const result = await response.json();
+        if (response.ok) {
+            msgContainer.innerHTML = '<div class="alert alert-success">Профиль обновлён</div>';
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            msgContainer.innerHTML = `<div class="alert alert-danger">${result.detail || 'Ошибка'}</div>`;
+        }
+    } catch (error) {
+        msgContainer.innerHTML = `<div class="alert alert-danger">Ошибка соединения</div>`;
+    }
+});
+</script>
+{% endblock %}

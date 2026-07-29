@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+
+{% block title %}Управление клиентами{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-2">
+        <div class="admin-sidebar">
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link active" href="/pages/admin">
+                        <i class="bi bi-people"></i> Клиенты
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/pages/users">
+                        <i class="bi bi-person-lines-fill"></i> Пользователи
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/pages/profile">
+                        <i class="bi bi-person"></i> Мой профиль
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/pages/db-check">
+                        <i class="bi bi-database-check"></i> Проверка БД
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/">
+                        <i class="bi bi-house"></i> На главную
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+    <div class="col-md-10">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1><i class="bi bi-people"></i> Клиенты</h1>
+            <button class="btn btn-success" onclick="openCreateModal()">
+                <i class="bi bi-plus-circle"></i> Добавить клиента
+            </button>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>ИНН</th>
+                        <th>Наименование</th>
+                        <th>Руководитель</th>
+                        <th>Email подтверждён</th>
+                        <th>Статус</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for client in clients %}
+                    <tr>
+                        <td>{{ client.id }}</td>
+                        <td>{{ client.inn }}</td>
+                        <td>{{ client.name }}</td>
+                        <td>{{ client.ceo_name or '-' }}</td>
+                        <td>
+                            {% if client.email_confirmed %}
+                            <span class="badge bg-success">Да</span>
+                            {% else %}
+                            <span class="badge bg-warning">Нет</span>
+                            <button class="btn btn-sm btn-info ms-1" onclick="confirmClientEmail({{ client.id }})" title="Подтвердить email вручную">
+                                <i class="bi bi-envelope-check"></i>
+                            </button>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if client.is_blocked %}
+                            <span class="badge bg-danger">Заблокирован</span>
+                            {% else %}
+                            <span class="badge bg-success">Активен</span>
+                            {% endif %}
+                            {% if client.is_verified %}
+                            <span class="badge bg-info">Верифицирован</span>
+                            {% else %}
+                            <span class="badge bg-warning">Не верифицирован</span>
+                            {% endif %}
+                        </td>
+                        <td class="table-actions">
+                            <button class="btn btn-sm btn-primary" onclick="editClient({{ client.id }})">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-info" onclick="verifyClient({{ client.id }})">
+                                <i class="bi bi-check-circle"></i>
+                            </button>
+                            <button class="btn btn-sm btn-warning" onclick="toggleBlock({{ client.id }})">
+                                <i class="bi bi-lock{% if client.is_blocked %}-fill{% endif %}"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteClient({{ client.id }})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для создания/редактирования -->
+<div class="modal fade" id="clientModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Клиент</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="clientForm">
+                    <input type="hidden" id="clientId">
+                    <div class="mb-3">
+                        <label for="inn" class="form-label">ИНН <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="inn" required>
+                            <button class="btn btn-outline-secondary" type="button" onclick="fillFromInn()">
+                                <i class="bi bi-cloud-download"></i> Заполнить
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Наименование <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ceo_name" class="form-label">ФИО руководителя</label>
+                        <input type="text" class="form-control" id="ceo_name">
+                    </div>
+                    <div class="mb-3">
+                        <label for="address" class="form-label">Адрес</label>
+                        <textarea class="form-control" id="address" rows="2"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="phone" class="form-label">Телефон</label>
+                        <input type="text" class="form-control" id="phone">
+                    </div>
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email">
+                    </div>
+                    <div class="mb-3">
+                        <label for="cz_environment" class="form-label">Контур Честного ЗНАКа</label>
+                        <select class="form-control" id="cz_environment">
+                            <option value="sandbox">Тестовый (Sandbox)</option>
+                            <option value="production">Боевой (Production)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="cz_token" class="form-label">Токен Честного ЗНАКа</label>
+                        <input type="text" class="form-control" id="cz_token" placeholder="Введите токен">
+                    </div>
+                    <div class="mb-3">
+                        <label for="cz_api_url" class="form-label">API URL (опционально)</label>
+                        <input type="text" class="form-control" id="cz_api_url" placeholder="https://...">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveClient()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function getCookie(name) {
+        let value = "; " + document.cookie;
+        let parts = value.split("; " + name + "=");
+        if (parts.length == 2) return parts.pop().split(";").shift();
+    }
+
+    function apiRequest(method, url, data = null) {
+        const options = {
+            method: method,
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + getCookie("access_token")
+            }
+        };
+        if (data) options.body = JSON.stringify(data);
+        return fetch(url, options).then(res => {
+            if (res.status === 401) {
+                window.location.href = "/pages/login";
+                return;
+            }
+            return res.json();
+        });
+    }
+
+    function openCreateModal() {
+        document.getElementById('modalTitle').innerText = 'Новый клиент';
+        document.getElementById('clientForm').reset();
+        document.getElementById('clientId').value = '';
+        var modal = new bootstrap.Modal(document.getElementById('clientModal'));
+        modal.show();
+    }
+
+    function editClient(id) {
+        apiRequest('GET', `/clients/${id}`).then(client => {
+            document.getElementById('modalTitle').innerText = 'Редактирование клиента';
+            document.getElementById('clientId').value = client.id;
+            document.getElementById('inn').value = client.inn;
+            document.getElementById('name').value = client.name;
+            document.getElementById('ceo_name').value = client.ceo_name || '';
+            document.getElementById('address').value = client.address || '';
+            document.getElementById('phone').value = client.phone || '';
+            document.getElementById('email').value = client.email || '';
+            var modal = new bootstrap.Modal(document.getElementById('clientModal'));
+            modal.show();
+        });
+    }
+
+    function saveClient() {
+        const id = document.getElementById('clientId').value;
+        const data = {
+            inn: document.getElementById('inn').value,
+            name: document.getElementById('name').value,
+            ceo_name: document.getElementById('ceo_name').value,
+            address: document.getElementById('address').value,
+            phone: document.getElementById('phone').value,
+            email: document.getElementById('email').value
+        };
+        const url = id ? `/clients/${id}` : '/clients/';
+        const method = id ? 'PUT' : 'POST';
+        apiRequest(method, url, data).then(result => {
+            location.reload();
+        }).catch(err => alert('Ошибка: ' + err.message));
+    }
+
+    function deleteClient(id) {
+        if (confirm('Удалить клиента?')) {
+            apiRequest('DELETE', `/clients/${id}`).then(() => location.reload());
+        }
+    }
+
+    function toggleBlock(id) {
+        apiRequest('POST', `/clients/${id}/block`).then(() => location.reload());
+    }
+
+    function verifyClient(id) {
+        apiRequest('POST', `/clients/${id}/verify`).then(() => location.reload());
+    }
+
+    function fillFromInn() {
+        const inn = document.getElementById('inn').value;
+        if (!inn) return alert('Введите ИНН');
+        const id = document.getElementById('clientId').value;
+        if (id) {
+            apiRequest('POST', `/clients/${id}/fill-from-inn`).then(data => {
+                document.getElementById('name').value = data.name || '';
+                document.getElementById('ceo_name').value = data.ceo_name || '';
+                document.getElementById('address').value = data.address || '';
+                document.getElementById('phone').value = data.phone || '';
+                document.getElementById('email').value = data.email || '';
+            }).catch(err => alert('Ошибка заполнения: ' + err.message));
+        } else {
+            alert('Сначала сохраните клиента, затем заполните по ИНН');
+        }
+    }
+
+    async function confirmClientEmail(clientId) {
+        if (!confirm('Подтвердить email этого клиента?')) return;
+        try {
+            const response = await fetch(`/clients/confirm-email/${clientId}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + getCookie('access_token')
+                }
+            });
+            if (response.ok) {
+                alert('Email подтверждён');
+                location.reload();
+            } else {
+                const data = await response.json();
+                alert('Ошибка: ' + (data.detail || 'Неизвестная ошибка'));
+            }
+        } catch (error) {
+            alert('Ошибка соединения');
+        }
+    }
+</script>
+{% endblock %}

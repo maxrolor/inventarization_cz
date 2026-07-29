@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Новый клиент{% endblock %}
+{% block content %}
+<h1>Добавить клиента</h1>
+<form method="post">
+    <input name="name" placeholder="Название">
+    <input name="inn" placeholder="ИНН">
+    <button type="submit">Создать</button>
+</form>
+{% endblock %}

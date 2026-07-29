@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Подтверждение email{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-{% if success %}success{% else %}danger{% endif %} text-white">
+                <h4 class="mb-0">
+                    {% if success %}
+                    <i class="bi bi-check-circle"></i> Email подтверждён
+                    {% else %}
+                    <i class="bi bi-exclamation-triangle"></i> Ошибка подтверждения
+                    {% endif %}
+                </h4>
+            </div>
+            <div class="card-body">
+                <p>{{ message }}</p>
+                {% if success %}
+                <a href="/client/login" class="btn btn-primary">Войти в личный кабинет</a>
+                {% else %}
+                <a href="/" class="btn btn-secondary">На главную</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

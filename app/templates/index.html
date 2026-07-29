@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Вход в систему{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-8 text-center">
+        <h1 class="display-4 mb-4">Добро пожаловать в систему инвентаризации</h1>
+        <p class="lead">Войдите как клиент</p>
+    </div>
+</div>
+
+<div class="row justify-content-center mt-3">
+    <div class="col-md-5">
+        <div class="card shadow">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-person display-1 text-success"></i>
+                <h4 class="mt-3">Клиент</h4>
+                <p class="text-muted">Доступ к личному кабинету и инвентаризации</p>
+                <a href="/client/login" class="btn btn-success btn-lg w-100">Войти как клиент</a>
+                <hr>
+                <p class="mt-3">Нет аккаунта? <a href="/client/register">Зарегистрироваться</a></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Маленькая ссылка для администратора -->
+<div class="row justify-content-center mt-4">
+    <div class="col-md-6 text-center">
+        <p class="text-muted small">
+            <i class="bi bi-shield-lock"></i>
+            <a href="/pages/login" class="text-muted text-decoration-none">Вход для администратора</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

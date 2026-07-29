@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Подтверждение входа{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5">
+        <div class="card shadow">
+            <div class="card-header bg-warning text-dark">
+                <h4><i class="bi bi-shield-lock"></i> Подтверждение входа</h4>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">На вашу почту <strong>{{ email }}</strong> отправлен код подтверждения. Введите его ниже.</p>
+                <form id="verifyForm">
+                    <input type="hidden" id="userId" value="{{ user_id }}">
+                    <div class="mb-3">
+                        <label for="code" class="form-label">Код из письма</label>
+                        <input type="text" class="form-control" id="code" placeholder="Введите 6-значный код" autocomplete="off" required>
+                    </div>
+                    <button type="submit" class="btn btn-warning w-100">
+                        <i class="bi bi-check-circle"></i> Подтвердить
+                    </button>
+                </form>
+                <div id="messageContainer" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('verifyForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const userId = document.getElementById('userId').value;
+    const code = document.getElementById('code').value.trim();
+    const msgContainer = document.getElementById('messageContainer');
+
+    if (!code) {
+        msgContainer.innerHTML = `<div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i> Введите код
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>`;
+        return;
+    }
+    if (code.length !== 6) {
+        msgContainer.innerHTML = `<div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-info-circle-fill me-2"></i> Код должен состоять из 6 цифр
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>`;
+        return;
+    }
+
+    msgContainer.innerHTML = `<div class="alert alert-info alert-dismissible fade show" role="alert">
+        <i class="bi bi-hourglass-split me-2"></i> Проверка...
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>`;
+
+    try {
+        const response = await fetch('/auth/verify-device', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, code: code })
+        });
+        if (response.ok) {
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                const data = await response.json();
+                if (data.access_token) {
+                    document.cookie = `access_token=${data.access_token}; path=/; max-age=${60*60*24}`;
+                }
+                msgContainer.innerHTML = `
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="bi bi-check-circle-fill me-2"></i> ${data.message || 'Устройство подтверждено'}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                `;
+                setTimeout(() => {
+                    window.location.href = '/pages/admin';
+                }, 1500);
+            } else {
+                window.location.href = '/pages/admin';
+            }
+        } else {
+            const data = await response.json().catch(() => ({}));
+            const errorMsg = data.detail || 'Ошибка подтверждения';
+            msgContainer.innerHTML = `
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i> ${errorMsg}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        msgContainer.innerHTML = `
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="bi bi-wifi-off me-2"></i> Ошибка соединения: ${error.message || 'Попробуйте позже'}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+    }
+});
+</script>
+{% endblock %}

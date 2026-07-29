@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+
+{% block title %}Проверка базы данных{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <h1 class="mb-4"><i class="bi bi-database"></i> Проверка подключения к БД</h1>
+
+        <div class="card shadow mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Статус подключения</h5>
+            </div>
+            <div class="card-body" id="statusContainer">
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Загрузка...</span>
+                    </div>
+                    <p class="mt-2">Проверка подключения...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Скрытые элементы для управления -->
+        <div id="actionButtons" style="display: none;">
+            <button class="btn btn-success" onclick="createTables()">
+                <i class="bi bi-table"></i> Создать таблицы
+            </button>
+            <button class="btn btn-warning" onclick="createDatabase()">
+                <i class="bi bi-plus-circle"></i> Создать БД
+            </button>
+        </div>
+
+        <div id="dbListContainer" style="display: none;" class="mt-3">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Доступные базы данных</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group" id="dbList"></ul>
+                </div>
+            </div>
+        </div>
+
+        <div id="tableListContainer" style="display: none;" class="mt-3">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Таблицы в БД</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group" id="tableList"></ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Модалка для создания БД -->
+        <div class="modal fade" id="createDbModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Создание базы данных</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            База данных <strong>{{ current_db }}</strong> не найдена.
+                            Хотите создать её?
+                            <br><small>Таблицы будут созданы автоматически.</small>
+                        </div>
+                        <form id="createDbForm">
+                            <div class="mb-3">
+                                <label for="newDbName" class="form-label">Имя новой базы данных</label>
+                                <input type="text" class="form-control" id="newDbName" value="{{ current_db }}" required>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                        <button type="button" class="btn btn-primary" onclick="confirmCreateDb()">Создать</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Форма создания администратора -->
+        <div id="adminFormContainer" style="display: none;" class="mt-4">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-person-plus"></i> Создание первого администратора</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Для входа в систему создайте учётную запись администратора.</p>
+                    <form id="adminForm" onsubmit="createAdmin(event)">
+                        <div class="mb-3">
+                            <label for="adminUsername" class="form-label">Имя пользователя <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="adminUsername" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="adminEmail" class="form-label">Email <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="adminEmail" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="adminPhone" class="form-label">Телефон <span class="text-danger">*</span></label>
+                            <input type="tel" class="form-control" id="adminPhone" required placeholder="+7XXXXXXXXXX">
+                            <small class="text-muted">Формат: +7XXXXXXXXXX</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="adminPassword" class="form-label">Пароль <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="adminPassword" required minlength="6">
+                            <small class="text-muted">Минимум 6 символов</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="adminPasswordConfirm" class="form-label">Подтверждение пароля <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="adminPasswordConfirm" required>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="bi bi-check-circle"></i> Создать администратора
+                        </button>
+                    </form>
+                    <div id="adminFormMessage" class="mt-3" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Сообщение, если админ уже есть -->
+        <div id="adminExistsMessage" style="display: none;" class="mt-4">
+            <div class="alert alert-info">
+                <i class="bi bi-person-check"></i>
+                Администратор уже создан.
+                <br>
+                <a href="/pages/login" class="btn btn-primary mt-2">Войти в систему</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentDbName = '{{ current_db }}';
+    let dbCreated = false;
+
+    function getCookie(name) {
+        let value = "; " + document.cookie;
+        let parts = value.split("; " + name + "=");
+        if (parts.length == 2) return parts.pop().split(";").shift();
+    }
+
+    function apiRequest(method, url, data = null) {
+        const options = {
+            method: method,
+            headers: {
+                "Content-Type": "application/json",
+            }
+        };
+        const token = getCookie("access_token");
+        if (token) {
+            options.headers["Authorization"] = "Bearer " + token;
+        }
+        if (data) options.body = JSON.stringify(data);
+        return fetch(url, options).then(res => {
+            if (res.status === 401) {
+                return res.json().then(data => {
+                    throw new Error(data.detail || 'Не авторизован');
+                });
+            }
+            return res.json();
+        });
+    }
+
+    async function checkDatabase() {
+        const container = document.getElementById('statusContainer');
+        try {
+            const response = await fetch('/db-admin/check');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            const data = await response.json();
+
+            let html = '';
+
+            // Проверяем, что data не null и имеет поле connection_ok
+            if (!data || typeof data.connection_ok === 'undefined') {
+                html += `<div class="alert alert-danger">❌ Неверный ответ от сервера</div>`;
+                container.innerHTML = html;
+                return;
+            }
+
+            if (data.connection_ok) {
+                html += `<div class="alert alert-success">✅ Подключение к PostgreSQL установлено</div>`;
+            } else {
+                html += `<div class="alert alert-danger">❌ Не удалось подключиться к PostgreSQL</div>`;
+                if (data.error) {
+                    html += `<div class="alert alert-warning">Ошибка: ${data.error}</div>`;
+                }
+                container.innerHTML = html;
+                return;
+            }
+
+            if (data.database_exists) {
+                html += `<div class="alert alert-success">✅ База данных <strong>${data.current_db}</strong> существует</div>`;
+
+                // Скрываем кнопки действий
+                document.getElementById('actionButtons').style.display = 'none';
+
+                if (data.tables && data.tables.length > 0) {
+                    html += `<div class="alert alert-info">📊 Найдено таблиц: ${data.tables.length}</div>`;
+                    document.getElementById('tableListContainer').style.display = 'block';
+                    const tableList = document.getElementById('tableList');
+                    tableList.innerHTML = data.tables.map(t => `<li class="list-group-item">📄 ${t}</li>`).join('');
+
+                    // Проверяем, есть ли администратор
+                    await checkAdminExists();
+                } else {
+                    html += `<div class="alert alert-warning">⚠️ Таблицы не найдены</div>`;
+                    document.getElementById('actionButtons').style.display = 'block';
+                    document.querySelector('#actionButtons .btn-success').style.display = 'inline-block';
+                    document.querySelector('#actionButtons .btn-warning').style.display = 'none';
+                }
+            } else {
+                html += `<div class="alert alert-danger">❌ База данных <strong>${data.current_db}</strong> не найдена</div>`;
+                document.getElementById('actionButtons').style.display = 'block';
+                document.querySelector('#actionButtons .btn-warning').style.display = 'inline-block';
+                document.querySelector('#actionButtons .btn-success').style.display = 'none';
+
+                // Скрываем форму админа, если БД нет
+                document.getElementById('adminFormContainer').style.display = 'none';
+                document.getElementById('adminExistsMessage').style.display = 'none';
+
+                if (data.databases && data.databases.length > 0) {
+                    document.getElementById('dbListContainer').style.display = 'block';
+                    const dbList = document.getElementById('dbList');
+                    dbList.innerHTML = data.databases.map(db => `<li class="list-group-item">🗄️ ${db}</li>`).join('');
+                }
+
+                // Открываем модалку создания БД
+                const modal = new bootstrap.Modal(document.getElementById('createDbModal'));
+                modal.show();
+            }
+
+            container.innerHTML = html;
+
+        } catch (error) {
+            container.innerHTML = `<div class="alert alert-danger">❌ Ошибка при проверке: ${error.message}</div>`;
+            console.error('Ошибка:', error);
+        }
+    }
+
+    async function checkAdminExists() {
+        try {
+            const data = await apiRequest('GET', '/db-admin/admin-exists');
+            if (data && data.exists) {
+                document.getElementById('adminExistsMessage').style.display = 'block';
+                document.getElementById('adminFormContainer').style.display = 'none';
+            } else {
+                document.getElementById('adminFormContainer').style.display = 'block';
+                document.getElementById('adminExistsMessage').style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Ошибка проверки админа:', error);
+            // Если ошибка, показываем форму (возможно, таблиц ещё нет)
+            document.getElementById('adminFormContainer').style.display = 'block';
+            document.getElementById('adminExistsMessage').style.display = 'none';
+        }
+    }
+
+    async function createTables() {
+        if (!confirm('Создать таблицы в базе данных?')) return;
+        try {
+            const result = await apiRequest('POST', '/db-admin/create-tables');
+            if (result && result.status === 'success') {
+                alert('✅ Таблицы успешно созданы');
+                location.reload();
+            } else {
+                alert('❌ Ошибка: ' + (result?.message || 'Неизвестная ошибка'));
+            }
+        } catch (error) {
+            alert('❌ Ошибка: ' + error.message);
+        }
+    }
+
+    function createDatabase() {
+        const modal = new bootstrap.Modal(document.getElementById('createDbModal'));
+        modal.show();
+    }
+
+    async function confirmCreateDb() {
+        const dbName = document.getElementById('newDbName').value.trim();
+        if (!dbName) {
+            alert('Введите имя базы данных');
+            return;
+        }
+        try {
+            const result = await apiRequest('POST', '/db-admin/create-database', { db_name: dbName });
+            if (result && result.status === 'success') {
+                dbCreated = true;
+                alert('✅ База данных и таблицы созданы');
+                location.reload();
+            } else {
+                alert('❌ Ошибка: ' + (result?.message || 'Неизвестная ошибка'));
+            }
+        } catch (error) {
+            alert('❌ Ошибка: ' + error.message);
+        }
+    }
+
+    async function createAdmin(event) {
+        event.preventDefault();
+
+        const username = document.getElementById('adminUsername').value.trim();
+        const email = document.getElementById('adminEmail').value.trim();
+        const phone = document.getElementById('adminPhone').value.trim();
+        const password = document.getElementById('adminPassword').value;
+        const passwordConfirm = document.getElementById('adminPasswordConfirm').value;
+
+        const messageDiv = document.getElementById('adminFormMessage');
+
+        // Валидация
+        if (!username || !email || !phone || !password || !passwordConfirm) {
+            messageDiv.style.display = 'block';
+            messageDiv.innerHTML = `<div class="alert alert-danger">Все поля обязательны для заполнения</div>`;
+            return;
+        }
+
+        if (password !== passwordConfirm) {
+            messageDiv.style.display = 'block';
+            messageDiv.innerHTML = `<div class="alert alert-danger">Пароли не совпадают</div>`;
+            return;
+        }
+        if (password.length < 6) {
+            messageDiv.style.display = 'block';
+            messageDiv.innerHTML = `<div class="alert alert-danger">Пароль должен содержать минимум 6 символов</div>`;
+            return;
+        }
+
+        // Скрываем старые сообщения
+        messageDiv.style.display = 'none';
+        messageDiv.innerHTML = '';
+
+        // Показываем индикатор загрузки
+        const submitBtn = event.target.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Создание...';
+        submitBtn.disabled = true;
+
+        try {
+            const data = await apiRequest('POST', '/db-admin/create-admin', {
+                username, email, phone, password
+            });
+
+            if (data && data.status === 'success') {
+                messageDiv.style.display = 'block';
+                messageDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle"></i>
+                        ✅ Администратор <strong>${data.username}</strong> создан!
+                        <br>
+                        <a href="/pages/login" class="btn btn-primary mt-2">Войти в систему</a>
+                    </div>
+                `;
+                document.getElementById('adminForm').reset();
+                document.getElementById('adminFormContainer').style.display = 'none';
+                document.getElementById('adminExistsMessage').style.display = 'block';
+            } else {
+                messageDiv.style.display = 'block';
+                messageDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        ❌ Ошибка: ${data?.detail || data?.message || 'Неизвестная ошибка'}
+                    </div>
+                `;
+            }
+        } catch (error) {
+            messageDiv.style.display = 'block';
+            messageDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    ❌ Ошибка: ${error.message}
+                </div>
+            `;
+        } finally {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        }
+    }
+
+    // Загружаем статус при загрузке страницы
+    document.addEventListener('DOMContentLoaded', function() {
+        checkDatabase();
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+
+{% block title %}Управление пользователями{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-2">
+        <div class="admin-sidebar">
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link" href="/pages/admin">
+                        <i class="bi bi-people"></i> Клиенты
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link active" href="/pages/users">
+                        <i class="bi bi-person-lines-fill"></i> Пользователи
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/pages/profile">
+                        <i class="bi bi-person"></i> Мой профиль
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/pages/db-check">
+                        <i class="bi bi-database-check"></i> Проверка БД
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/">
+                        <i class="bi bi-house"></i> На главную
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+    <div class="col-md-10">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1><i class="bi bi-people"></i> Пользователи</h1>
+            <button class="btn btn-success" onclick="openCreateModal()">
+                <i class="bi bi-plus-circle"></i> Добавить пользователя
+            </button>
+        </div>
+
+        <div class="card shadow">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>ID</th>
+                                <th>Имя пользователя</th>
+                                <th>ФИО</th>
+                                <th>Email</th>
+                                <th>Телефон</th>
+                                <th>Роль</th>
+                                <th>Статус</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            <tr>
+                                <td colspan="8" class="text-center">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Загрузка...</span>
+                                    </div>
+                                    <p class="mt-2">Загрузка пользователей...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для создания/редактирования -->
+<div class="modal fade" id="userModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Пользователь</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="userForm">
+                    <input type="hidden" id="userId">
+                    <div class="mb-3">
+                        <label for="modalUsername" class="form-label">Имя пользователя <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="modalUsername" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="modalFullName" class="form-label">ФИО</label>
+                        <input type="text" class="form-control" id="modalFullName" placeholder="Полное имя пользователя">
+                    </div>
+                    <div class="mb-3">
+                        <label for="modalEmail" class="form-label">Email <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control" id="modalEmail" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="modalPhone" class="form-label">Телефон</label>
+                        <input type="tel" class="form-control" id="modalPhone" placeholder="+7XXXXXXXXXX">
+                    </div>
+                    <div class="mb-3">
+                        <label for="modalRole" class="form-label">Роль <span class="text-danger">*</span></label>
+                        <select class="form-select" id="modalRole">
+                            <option value="ADMIN">Администратор</option>
+                            <option value="CLIENT">Клиент</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="modalPassword" class="form-label" id="passwordLabel">Пароль <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control" id="modalPassword" required>
+                        <small class="text-muted" id="passwordHint">Минимум 6 символов</small>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="modalIsActive" checked>
+                        <label class="form-check-label" for="modalIsActive">Активен</label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveUser()">
+                    <i class="bi bi-save"></i> Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function getCookie(name) {
+    let value = "; " + document.cookie;
+    let parts = value.split("; " + name + "=");
+    if (parts.length == 2) return parts.pop().split(";").shift();
+}
+
+async function loadUsers() {
+    try {
+        const response = await fetch('/auth/users', {
+            headers: {
+                'Authorization': 'Bearer ' + getCookie('access_token')
+            }
+        });
+        if (!response.ok) {
+            if (response.status === 401) {
+                window.location.href = '/pages/login';
+                return;
+            }
+            throw new Error('Ошибка загрузки пользователей');
+        }
+        const users = await response.json();
+        const tbody = document.getElementById('usersTableBody');
+        if (users.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">Нет пользователей</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = users.map(user => `
+            <tr>
+                <td>${user.id}</td>
+                <td><strong>${user.username}</strong></td>
+                <td>${user.full_name || '-'}</td>
+                <td>${user.email || '-'}</td>
+                <td>${user.phone || '-'}</td>
+                <td>
+                    <span class="badge ${user.role === 'ADMIN' ? 'bg-danger' : 'bg-info'}">
+                        ${user.role === 'ADMIN' ? 'Админ' : 'Клиент'}
+                    </span>
+                </td>
+                <td>
+                    <span class="badge ${user.is_active ? 'bg-success' : 'bg-secondary'}">
+                        ${user.is_active ? '✅ Активен' : '❌ Заблокирован'}
+                    </span>
+                </td>
+                <td class="table-actions">
+                    <button class="btn btn-sm btn-primary" onclick="editUser(${user.id})" title="Редактировать">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    ${user.id !== 1 ? `
+                        <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})" title="Удалить">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    ` : `
+                        <button class="btn btn-sm btn-secondary" disabled title="Нельзя удалить главного админа">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    `}
+                </td>
+            </tr>
+        `).join('');
+    } catch (error) {
+        document.getElementById('usersTableBody').innerHTML =
+            `<tr><td colspan="8" class="text-center text-danger">❌ ${error.message}</td></tr>`;
+    }
+}
+
+function openCreateModal() {
+    document.getElementById('modalTitle').innerText = '➕ Новый пользователь';
+    document.getElementById('userForm').reset();
+    document.getElementById('userId').value = '';
+    document.getElementById('modalPassword').required = true;
+    document.getElementById('modalPassword').value = '';
+    document.getElementById('modalPassword').placeholder = 'Введите пароль';
+    document.getElementById('passwordLabel').innerHTML = 'Пароль <span class="text-danger">*</span>';
+    document.getElementById('passwordHint').textContent = 'Минимум 6 символов';
+    document.getElementById('modalIsActive').checked = true;
+    document.getElementById('modalRole').value = 'CLIENT';
+    var modal = new bootstrap.Modal(document.getElementById('userModal'));
+    modal.show();
+}
+
+async function editUser(id) {
+    try {
+        const response = await fetch(`/auth/users/${id}`, {
+            headers: {
+                'Authorization': 'Bearer ' + getCookie('access_token')
+            }
+        });
+        if (!response.ok) throw new Error('Ошибка загрузки данных пользователя');
+        const user = await response.json();
+        document.getElementById('modalTitle').innerText = '✏️ Редактирование пользователя';
+        document.getElementById('userId').value = user.id;
+        document.getElementById('modalUsername').value = user.username || '';
+        document.getElementById('modalFullName').value = user.full_name || '';
+        document.getElementById('modalEmail').value = user.email || '';
+        document.getElementById('modalPhone').value = user.phone || '';
+        document.getElementById('modalRole').value = user.role || 'CLIENT';
+        document.getElementById('modalIsActive').checked = user.is_active !== false;
+        document.getElementById('modalPassword').required = false;
+        document.getElementById('modalPassword').value = '';
+        document.getElementById('modalPassword').placeholder = 'Оставьте пустым, если не меняете';
+        document.getElementById('passwordLabel').innerHTML = 'Пароль <span class="text-muted">(оставьте пустым, если не меняете)</span>';
+        document.getElementById('passwordHint').textContent = 'Введите новый пароль только если хотите его сменить';
+        var modal = new bootstrap.Modal(document.getElementById('userModal'));
+        modal.show();
+    } catch (error) {
+        alert('❌ Ошибка: ' + error.message);
+    }
+}
+
+async function saveUser() {
+    const id = document.getElementById('userId').value;
+    const username = document.getElementById('modalUsername').value.trim();
+    const fullName = document.getElementById('modalFullName').value.trim();
+    const email = document.getElementById('modalEmail').value.trim();
+    const phone = document.getElementById('modalPhone').value.trim();
+    const role = document.getElementById('modalRole').value;
+    const isActive = document.getElementById('modalIsActive').checked;
+    const password = document.getElementById('modalPassword').value;
+    if (!username || !email) {
+        alert('❌ Заполните обязательные поля (Имя пользователя и Email)');
+        return;
+    }
+    if (!id && !password) {
+        alert('❌ При создании нового пользователя нужно указать пароль');
+        return;
+    }
+    if (password && password.length < 6) {
+        alert('❌ Пароль должен быть минимум 6 символов');
+        return;
+    }
+    const data = { username, email, phone, full_name: fullName, role, is_active: isActive };
+    if (password) data.password = password;
+    const url = id ? `/auth/users/${id}` : '/auth/register';
+    const method = id ? 'PUT' : 'POST';
+    const btn = document.querySelector('#userModal .btn-primary');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Сохранение...';
+    btn.disabled = true;
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + getCookie('access_token')
+            },
+            body: JSON.stringify(data)
+        });
+        const result = await response.json();
+        if (response.ok) {
+            alert('✅ Пользователь сохранён');
+            bootstrap.Modal.getInstance(document.getElementById('userModal')).hide();
+            loadUsers();
+        } else {
+            alert('❌ Ошибка: ' + (result.detail || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        alert('❌ Ошибка: ' + error.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+async function deleteUser(id) {
+    if (!confirm('Удалить пользователя?')) return;
+    try {
+        const response = await fetch(`/auth/users/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': 'Bearer ' + getCookie('access_token')
+            }
+        });
+        if (response.ok) {
+            alert('✅ Пользователь удалён');
+            loadUsers();
+        } else {
+            const result = await response.json();
+            alert('❌ Ошибка: ' + (result.detail || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        alert('❌ Ошибка: ' + error.message);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', loadUsers);
+</script>
+{% endblock %}

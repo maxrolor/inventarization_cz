@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Мой профиль (админ){% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-2">
+        <div class="admin-sidebar">
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link" href="/pages/admin">
+                        <i class="bi bi-people"></i> Клиенты
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/pages/users">
+                        <i class="bi bi-person-lines-fill"></i> Пользователи
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link active" href="/pages/profile">
+                        <i class="bi bi-person"></i> Мой профиль
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/pages/db-check">
+                        <i class="bi bi-database-check"></i> Проверка БД
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/">
+                        <i class="bi bi-house"></i> На главную
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+    <div class="col-md-10">
+        <h1 class="mb-4"><i class="bi bi-person-circle"></i> Мой профиль (админ)</h1>
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-pencil-square"></i> Редактирование профиля</h5>
+            </div>
+            <div class="card-body">
+                <form id="profileForm">
+                    <div class="mb-3">
+                        <label for="fullName" class="form-label">ФИО</label>
+                        <input type="text" class="form-control" id="fullName" placeholder="Введите ваше полное имя">
+                    </div>
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Имя пользователя <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control" id="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="phone" class="form-label">Телефон</label>
+                        <input type="tel" class="form-control" id="phone" placeholder="+7XXXXXXXXXX">
+                    </div>
+                    <hr>
+                    <h6 class="mb-3">Смена пароля</h6>
+                    <div class="mb-3">
+                        <label for="newPassword" class="form-label">Новый пароль</label>
+                        <input type="password" class="form-control" id="newPassword" placeholder="Оставьте пустым, если не меняете" minlength="6">
+                    </div>
+                    <div class="mb-3">
+                        <label for="confirmPassword" class="form-label">Подтверждение пароля</label>
+                        <input type="password" class="form-control" id="confirmPassword" placeholder="Повторите новый пароль">
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Сохранить
+                    </button>
+                    <a href="/pages/admin" class="btn btn-secondary">Назад</a>
+                </form>
+                <div id="messageContainer" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function getCookie(name) {
+    let value = "; " + document.cookie;
+    let parts = value.split("; " + name + "=");
+    if (parts.length == 2) return parts.pop().split(";").shift();
+}
+
+async function loadProfile() {
+    try {
+        const response = await fetch('/auth/profile', {
+            headers: {
+                'Authorization': 'Bearer ' + getCookie('access_token')
+            }
+        });
+        if (!response.ok) {
+            if (response.status === 401) {
+                window.location.href = '/pages/login';
+                return;
+            }
+            throw new Error('Ошибка загрузки профиля');
+        }
+        const user = await response.json();
+        document.getElementById('fullName').value = user.full_name || '';
+        document.getElementById('username').value = user.username || '';
+        document.getElementById('email').value = user.email || '';
+        document.getElementById('phone').value = user.phone || '';
+    } catch (error) {
+        document.getElementById('messageContainer').innerHTML =
+            `<div class="alert alert-danger">❌ ${error.message}</div>`;
+    }
+}
+
+document.getElementById('profileForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const fullName = document.getElementById('fullName').value.trim();
+    const username = document.getElementById('username').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const phone = document.getElementById('phone').value.trim();
+    const newPassword = document.getElementById('newPassword').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+    const msgContainer = document.getElementById('messageContainer');
+    if (!username || !email) {
+        msgContainer.innerHTML = `<div class="alert alert-danger">Заполните обязательные поля</div>`;
+        return;
+    }
+    if (newPassword && newPassword !== confirmPassword) {
+        msgContainer.innerHTML = `<div class="alert alert-danger">Пароли не совпадают</div>`;
+        return;
+    }
+    if (newPassword && newPassword.length < 6) {
+        msgContainer.innerHTML = `<div class="alert alert-danger">Пароль должен быть не менее 6 символов</div>`;
+        return;
+    }
+    const data = { username, email, phone, full_name: fullName };
+    if (newPassword) data.password = newPassword;
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Сохранение...';
+    submitBtn.disabled = true;
+    try {
+        const response = await fetch('/auth/profile', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + getCookie('access_token')
+            },
+            body: JSON.stringify(data)
+        });
+        const result = await response.json();
+        if (response.ok) {
+            msgContainer.innerHTML = `<div class="alert alert-success">✅ Профиль обновлён!</div>`;
+            setTimeout(() => window.location.href = '/pages/admin', 1500);
+        } else {
+            msgContainer.innerHTML = `<div class="alert alert-danger">❌ ${result.detail || 'Ошибка при сохранении'}</div>`;
+        }
+    } catch (error) {
+        msgContainer.innerHTML = `<div class="alert alert-danger">❌ Ошибка: ${error.message}</div>`;
+    } finally {
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+    }
+});
+
+document.addEventListener('DOMContentLoaded', loadProfile);
+</script>
+{% endblock %}
