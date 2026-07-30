@@ -1,52 +1,57 @@
-from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
+from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime, date
-from app.models.client import ClientType
+from app.models.client import ClientType, CzEnvironment
 
+
+# ---------- Базовые схемы ----------
 class ClientBase(BaseModel):
     inn: str = Field(..., min_length=10, max_length=12)
-    name: str
+    name: Optional[str] = None
     ceo_name: Optional[str] = None
-    type: ClientType = ClientType.LEGAL
-    kpp: Optional[str] = Field(None, min_length=9, max_length=9)
+    type: Optional[ClientType] = ClientType.INDIVIDUAL
+    kpp: Optional[str] = None
+    email: EmailStr
     phone: Optional[str] = None
-    email: Optional[str] = None  # изменено с EmailStr на str для поддержки любых доменов
-    subscription_end_date: Optional[date] = None
+    is_active: bool = True
+    is_verified: bool = False
+    is_blocked: bool = False
+    cz_environment: CzEnvironment = CzEnvironment.SANDBOX
+    cz_token: Optional[str] = None
+    cz_api_url: Optional[str] = None
+    addresses: List[str] = []
 
-    @field_validator('inn')
-    def validate_inn(cls, v):
-        if not v.isdigit():
-            raise ValueError('ИНН должен содержать только цифры')
-        if len(v) not in [10, 12]:
-            raise ValueError('ИНН должен быть 10 или 12 цифр')
-        return v
 
 class ClientCreate(ClientBase):
     password: str = Field(..., min_length=6)
-    addresses: List[str] = Field(default_factory=list)
 
-class ClientUpdate(BaseModel):
-    name: Optional[str] = None
-    ceo_name: Optional[str] = None
-    type: Optional[ClientType] = None
-    kpp: Optional[str] = None
-    phone: Optional[str] = None
-    email: Optional[str] = None
-    subscription_end_date: Optional[date] = None
-    addresses: Optional[List[str]] = None
-
-class ClientResponse(ClientBase):
-    id: int
-    is_verified: bool
-    is_blocked: bool
-    created_at: datetime
-    updated_at: datetime
-    addresses: List[str] = []
-    email_confirmed: Optional[bool] = None
-
-    class Config:
-        from_attributes = True
 
 class ClientLogin(BaseModel):
     inn: str
     password: str
+
+
+class ClientUpdate(BaseModel):
+    inn: Optional[str] = Field(None, min_length=10, max_length=12)
+    name: Optional[str] = None
+    ceo_name: Optional[str] = None
+    type: Optional[ClientType] = None
+    kpp: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_verified: Optional[bool] = None
+    is_blocked: Optional[bool] = None
+    cz_environment: Optional[CzEnvironment] = None
+    cz_token: Optional[str] = None
+    cz_api_url: Optional[str] = None
+    addresses: Optional[List[str]] = None
+
+
+class ClientResponse(ClientBase):
+    id: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

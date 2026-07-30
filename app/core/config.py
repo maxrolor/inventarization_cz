@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic_settings import BaseSettings
 from pydantic import Field
 
@@ -14,15 +15,19 @@ class Settings(BaseSettings):
     algorithm: str = Field(..., env="ALGORITHM")
     access_token_expire_minutes: int = Field(..., env="ACCESS_TOKEN_EXPIRE_MINUTES")
 
-    # SMTP (Yandex)
+    # SMTP
     smtp_host: str = Field(..., env="SMTP_HOST")
     smtp_port: int = Field(..., env="SMTP_PORT")
     smtp_user: str = Field(..., env="SMTP_USER")
     smtp_password: str = Field(..., env="SMTP_PASSWORD")
     smtp_from: str = Field(..., env="SMTP_FROM")
 
-    # Dadata парсинг по ИНН
+    # Dadata
     dadata_api_key: str = Field("", env="DADATA_API_KEY")
+
+    # Celery (опционально, чтобы избежать ошибок extra_forbidden)
+    celery_broker_url: Optional[str] = None
+    celery_result_backend: Optional[str] = None
 
     @property
     def database_url(self) -> str:
@@ -32,5 +37,6 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"  # разрешаем любые дополнительные поля в .env
 
 settings = Settings()
