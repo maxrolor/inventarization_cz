@@ -1,9 +1,112 @@
-from app.models.client import Client, CzEnvironment
+import asyncio
+import httpx
+import logging
+from typing import Optional, Dict, Any, List
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.services.token_service import TokenService
+from app.core.config import settings
 
-def get_cz_api_url(client: Client) -> str:
-    """Возвращает URL API Честного ЗНАКа для указанного клиента"""
-    if client.cz_api_url:
-        return client.cz_api_url
-    if client.cz_environment == CzEnvironment.SANDBOX:
-        return "https://markirovka.sandbox.crptech.ru"
-    return "https://cdn.crpt.ru/api/v4/true-api/"
+logger = logging.getLogger(__name__)
+
+class NoTokenError(Exception):
+    pass
+
+class TokenExpiredError(Exception):
+    pass
+
+class CzApiClient:
+    """
+    Асинхронный клиент для True API Честного знака.
+    Использует токен, сохранённый в БД для организации (client_id).
+    """
+
+    def __init__(
+        self,
+        client_id: int,
+        db: AsyncSession,
+        base_url: Optional[str] = None,
+        timeout: int = 60,
+        max_retries: int = 3,
+    ):
+        self.client_id = client_id
+        self.db = db
+        self.base_url = base_url or settings.cz_api_base_url
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self._token: Optional[str] = None
+        self._http_client: Optional[httpx.AsyncClient] = None
+
+    async def __aenter__(self):
+        self._http_client = httpx.AsyncClient(
+            timeout=self.timeout,
+            headers={"Accept": "*/*", "Content-Type": "application/json"},
+        )
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._http_client:
+            await self._http_client.aclose()
+
+    async def _ensure_token(self):
+        """Загружает токен из БД, если он ещё не загружен."""
+        if self._token is None:
+            self._token = await TokenService.get_cz_token(self.client_id, self.db)
+            if not self._token:
+                raise NoTokenError(
+                    "Токен Честного знака не найден для вашей организации. "
+                    "Пожалуйста, получите токен через страницу авторизации."
+                )
+
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        params: Optional[Dict[str, Any]] = None,
+        json_data: Optional[Dict[str, Any]] = None,
+        data: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> httpx.Response:
+        await self._ensure_token()
+
+        url = f"{self.base_url}{path}"
+        default_headers = {"Authorization": f"Bearer {self._token}"}
+        if headers:
+            default_headers.update(headers)
+
+        for attempt in range(self.max_retries):
+            try:
+                response = await self._http_client.request(
+                    method=method,
+                    url=url,
+                    params=params,
+                    json=json_data,
+                    data=data,
+                    headers=default_headers,
+                )
+                if response.status_code == 401:
+                    # Токен истёк — выбрасываем исключение для перехвата на уровне API
+                    raise TokenExpiredError(
+                        "Токен Честного знака истёк. Обновите его через страницу авторизации."
+                    )
+                response.raise_for_status()
+                return response
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code in (429, 500, 502, 503):
+                    wait = 2 ** attempt
+                    logger.warning(f"Retry {attempt+1}/{self.max_retries} after {wait}s")
+                    await asyncio.sleep(wait)
+                    continue
+                raise
+            except (TokenExpiredError, NoTokenError):
+                # Эти ошибки не должны ретраиться
+                raise
+        raise RuntimeError("Max retries exceeded")
+
+    # ---------- Методы API (примеры) ----------
+    async def get_cises_info(self, cises: List[str]) -> Dict[str, Any]:
+        path = "/api/v3/true-api/cises/info"
+        response = await self._request("POST", path, json_data=cises)
+        return response.json()
+
+    # ... другие методы (create_document, create_write_off и т.д.) остаются без изменений,
+    # только вызывают self._request(...)

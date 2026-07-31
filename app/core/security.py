@@ -3,9 +3,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import jwt, JWTError
 from app.core.config import settings
+from cryptography.fernet import Fernet
 import logging
 
 logger = logging.getLogger(__name__)
+
+_fernet = Fernet(settings.fernet_key.encode())
 
 # --- Хеширование паролей ---
 
@@ -41,3 +44,11 @@ def decode_token(token: str) -> dict:
     except JWTError as e:
         logger.error(f"Ошибка декодирования токена: {e}")
         return {}
+
+def encrypt_token(token: str) -> str:
+    """Шифрует строку токена."""
+    return _fernet.encrypt(token.encode()).decode()
+
+def decrypt_token(encrypted_token: str) -> str:
+    """Расшифровывает зашифрованный токен."""
+    return _fernet.decrypt(encrypted_token.encode()).decode()

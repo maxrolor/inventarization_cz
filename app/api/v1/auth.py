@@ -3,6 +3,7 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.core.config import settings
@@ -22,6 +23,9 @@ from datetime import datetime, timedelta, timezone
 from app.models.password_reset import PasswordReset
 from app.schemas.user import ResetPasswordRequest, ResetPasswordVerify
 from app.services.email_service import send_reset_code_email
+
+class CZTokenRequest(BaseModel):
+    token: str
 
 logger = logging.getLogger(__name__)
 
@@ -270,3 +274,41 @@ async def logout(request: Request):
     )
     logger.info("Пользователь вышел из системы")
     return response
+
+@router.post("/set-cz-token", status_code=status.HTTP_200_OK)
+async def set_cz_token(
+    request: CZTokenRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Сохраняет токен Честного знака для организации пользователя.
+    """
+    if not current_user.client_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Пользователь не привязан к организации."
+        )
+    try:
+        await TokenService.set_cz_token(current_user.client_id, request.token, db)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"status": "ok", "message": "Токен сохранён"}
+
+@router.get("/cz-token-status")
+async def cz_token_status(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Возвращает статус токена для организации пользователя.
+    """
+    if not current_user.client_id:
+        return {"has_token": False, "expires": None}
+    client = await db.get(Client, current_user.client_id)
+    has_token = client is not None and client.cz_token_encrypted is not None
+    expires = client.cz_token_expires.isoformat() if client and client.cz_token_expires else None
+    return {
+        "has_token": has_token,
+        "expires": expires,
+    }

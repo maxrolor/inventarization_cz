@@ -38,7 +38,8 @@ class Client(Base):
 
     # Поля для интеграции с Честным знаком
     cz_environment = Column(Enum(CzEnvironment), default=CzEnvironment.SANDBOX)
-    cz_token = Column(String(500), nullable=True)
+    cz_token_encrypted = Column(Text, nullable=True)
+    cz_token_expires = Column(DateTime, nullable=True)
     cz_api_url = Column(String(255), nullable=True)
 
     # Связи с другими моделями
