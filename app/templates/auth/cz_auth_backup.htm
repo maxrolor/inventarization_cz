@@ -39,9 +39,13 @@
 {% endblock %}
 
 {% block scripts %}
-{{ super() }}
-<!-- Подключаем официальный API КриптоПРО из локальной статики -->
-<script src="{{ url_for('static', path='/js/cadesplugin_api.js') }}"></script>
-<!-- Ваш скрипт для работы с токеном -->
+{{ super() }}  <!-- Если в базовом шаблоне есть скрипты, они будут сохранены -->
+<script>
+    // Костыль для Safari (оставляем, если нужно)
+    if (typeof window.safari === 'undefined') {
+        window.safari = {};
+    }
+</script>
+<script src="{{ url_for('static', path='/js/cades-pluginer.bundle.js') }}"></script>
 <script src="{{ url_for('static', path='/js/cz_auth.js') }}"></script>
 {% endblock %}

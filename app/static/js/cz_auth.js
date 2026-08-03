@@ -1,161 +1,247 @@
-document.addEventListener('DOMContentLoaded', function() {
-    const btn = document.getElementById('getTokenBtn');
+// app/static/js/cz_auth.js
+
+(function() {
+    'use strict';
+
+    const getTokenBtn = document.getElementById('getTokenBtn');
     const statusDiv = document.getElementById('status');
     const resultDiv = document.getElementById('result');
 
-    let pluginer = null;
-    let certificate = null;
+    if (!getTokenBtn) return;
 
-    async function initPluginer() {
-        try {
-            if (typeof CadesPluginer === 'undefined') {
-                throw new Error('Библиотека CadesPluginer не загружена. Проверьте подключение скрипта.');
+    function setStatus(msg, err = false) {
+        statusDiv.innerHTML = `<div class="alert ${err ? 'alert-danger' : 'alert-info'}">${msg}</div>`;
+    }
+
+    function setResult(msg, err = false) {
+        resultDiv.innerHTML = `<div class="alert ${err ? 'alert-danger' : 'alert-success'}">${msg}</div>`;
+    }
+
+    function logObjectMethods(obj, name) {
+        console.log(`📌 Доступные свойства/методы объекта ${name}:`);
+        const props = Object.getOwnPropertyNames(obj);
+        for (let p of props) {
+            if (typeof obj[p] === 'function') {
+                console.log(`  ${p}()`);
+            } else {
+                console.log(`  ${p}: ${obj[p]}`);
             }
-            
-            // ОБРАТИТЕ ВНИМАНИЕ: ВАЖНОЕ ИСПРАВЛЕНИЕ ТУТ
-            // Берем конструктор, даже если он спрятан внутри объекта default
-            const CadesPluginerConstructor = CadesPluginer.default || CadesPluginer;
-            
-            pluginer = new CadesPluginerConstructor();
-            await pluginer.init();
-            return true;
-        } catch (e) {
-            statusDiv.innerHTML = `<div class="alert alert-danger">Ошибка инициализации плагина: ${e.message}</div>`;
-            console.error(e);
-            return false;
+        }
+        let proto = Object.getPrototypeOf(obj);
+        while (proto && proto !== Object.prototype) {
+            const protoProps = Object.getOwnPropertyNames(proto);
+            for (let p of protoProps) {
+                if (typeof proto[p] === 'function' && !props.includes(p)) {
+                    console.log(`  (prototype) ${p}()`);
+                }
+            }
+            proto = Object.getPrototypeOf(proto);
         }
     }
 
-    async function getCertificate() {
-        try {
-            const certs = await pluginer.getCertificates();
-            if (!certs || certs.length === 0) {
-                throw new Error('Сертификаты не найдены. Убедитесь, что КриптоПРО установлен и сертификат доступен.');
-            }
-            // Для простоты берём первый. Можно реализовать выбор через модальное окно.
-            certificate = certs[0];
-            statusDiv.innerHTML = `<div class="alert alert-info">Выбран сертификат: ${certificate.subjectName || certificate.serialNumber}</div>`;
-            return certificate;
-        } catch (e) {
-            statusDiv.innerHTML = `<div class="alert alert-danger">Ошибка получения сертификатов: ${e.message}</div>`;
-            return null;
-        }
-    }
+    async function getCzToken() {
+        setStatus('Инициализация плагина...');
+        setResult('');
 
-    async function getAuthKey() {
         try {
-            const response = await fetch('/api/v1/proxy/auth-key', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
+            if (typeof window.cadesplugin === 'undefined') {
+                throw new Error('Плагин КриптоПРО CAdES не найден.');
+            }
+
+            window.cadesplugin_load_timeout = 60000;
+
+            if (typeof window.cadesplugin.then === 'function') {
+                await window.cadesplugin;
+                console.log('✅ Плагин инициализирован');
+            }
+
+            if (typeof window.cadesplugin.async_spawn !== 'function') {
+                throw new Error('Метод async_spawn не найден.');
+            }
+
+            setStatus('Запрос ключа сессии...');
+            const token = await new Promise((resolve, reject) => {
+                window.cadesplugin.async_spawn(function* () {
+                    try {
+                        // 1. Получить keyId
+                        const keyResponse = yield fetch('/api/v1/proxy/auth-key', {
+                            method: 'GET',
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                        if (!keyResponse.ok) {
+                            const errText = yield keyResponse.text();
+                            throw new Error(`Ошибка получения ключа: ${keyResponse.status} - ${errText}`);
+                        }
+                        const keyData = yield keyResponse.json();
+                        const uuid = keyData.uuid;
+                        const data = keyData.data;
+                        console.log('🆔 uuid:', uuid);
+                        console.log('📊 data:', data);
+
+                        // 2. Открыть хранилище
+                        const store = yield window.cadesplugin.CreateObjectAsync('CAdESCOM.Store');
+                        yield store.Open(2, 'My', 0);
+
+                        // 3. Найти сертификат с закрытым ключом
+                        const certs = yield store.Certificates;
+                        const count = yield certs.Count;
+                        let cert = null;
+                        for (let i = 1; i <= count; i++) {
+                            const c = yield certs.Item(i);
+                            const hasKey = yield c.HasPrivateKey();
+                            if (hasKey) {
+                                cert = c;
+                                break;
+                            }
+                        }
+                        if (!cert) {
+                            throw new Error('Не найден сертификат с закрытым ключом');
+                        }
+                        console.log('✅ Сертификат выбран:', yield cert.SubjectName);
+
+                        // 4. Создать подписанта и установить алгоритм
+                        const signer = yield window.cadesplugin.CreateObjectAsync('CAdESCOM.CPSigner');
+                        // Установка сертификата
+                        if (typeof signer.propset_Certificate === 'function') {
+                            yield signer.propset_Certificate(cert);
+                        } else if (typeof signer.put_Certificate === 'function') {
+                            yield signer.put_Certificate(cert);
+                        } else {
+                            signer.Certificate = cert;
+                        }
+                        // Алгоритм хеширования: 101 = ГОСТ 2012-256
+                        if (typeof signer.propset_Algorithm === 'function') {
+                            yield signer.propset_Algorithm(101);
+                        } else if (typeof signer.put_Algorithm === 'function') {
+                            yield signer.put_Algorithm(101);
+                        } else {
+                            signer.Algorithm = 101;
+                        }
+                        console.log('🔐 Алгоритм установлен');
+
+                        // 5. Создать CadesSignedData
+                        let signedData;
+                        try {
+                            signedData = yield window.cadesplugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
+                        } catch (e) {
+                            signedData = yield window.cadesplugin.CreateObjectAsync('CAdESCOM.SignedData');
+                        }
+                        console.log('✅ SignedData создан');
+
+                        // 6. Логируем доступные методы signedData
+                        logObjectMethods(signedData, 'signedData');
+
+                        // 7. Устанавливаем EncodingType = 0 (Base64)
+                        if (typeof signedData.propset_EncodingType === 'function') {
+                            yield signedData.propset_EncodingType(0);
+                        } else if (typeof signedData.put_EncodingType === 'function') {
+                            yield signedData.put_EncodingType(0);
+                        } else {
+                            signedData.EncodingType = 0;
+                        }
+                        console.log('✅ EncodingType = 0');
+
+                        // 8. Устанавливаем Content
+                        if (typeof signedData.propset_Content === 'function') {
+                            yield signedData.propset_Content(data);
+                        } else if (typeof signedData.put_Content === 'function') {
+                            yield signedData.put_Content(data);
+                        } else {
+                            signedData.Content = data;
+                        }
+                        console.log('✅ Content установлен');
+
+                        // 9. Пробуем установить Options = 0x1 (отключить TSA)
+                        if (typeof signedData.propset_Options === 'function') {
+                            yield signedData.propset_Options(0x1);
+                            console.log('✅ Options установлен через propset_Options = 0x1');
+                        } else if (typeof signedData.put_Options === 'function') {
+                            yield signedData.put_Options(0x1);
+                            console.log('✅ Options установлен через put_Options = 0x1');
+                        } else if (typeof signedData.set_Options === 'function') {
+                            yield signedData.set_Options(0x1);
+                            console.log('✅ Options установлен через set_Options = 0x1');
+                        } else {
+                            try {
+                                signedData.Options = 0x1;
+                                console.log('✅ Options установлен напрямую = 0x1');
+                            } catch (e) {
+                                console.warn('Не удалось установить Options:', e);
+                            }
+                        }
+
+                        // 10. Пробуем подписать
+                        console.log('🔄 Вызов signedData.Sign(signer, false, 0)');
+                        let signature = null;
+                        try {
+                            signature = yield signedData.Sign(signer, false, 0);
+                            console.log('✅ Подпись создана через Sign(signer, false, 0)');
+                        } catch (err) {
+                            console.warn('❌ Sign(signer, false, 0) не сработал:', err.message || err);
+                            try {
+                                console.log('🔄 Пробуем signedData.Sign(signer, true, 0)');
+                                signature = yield signedData.Sign(signer, true, 0);
+                                console.log('✅ Подпись создана через Sign(signer, true, 0)');
+                            } catch (err2) {
+                                console.warn('❌ Sign(signer, true, 0) не сработал:', err2.message || err2);
+                                try {
+                                    console.log('🔄 Пробуем signedData.Sign(signer, false)');
+                                    signature = yield signedData.Sign(signer, false);
+                                    console.log('✅ Подпись создана через Sign(signer, false)');
+                                } catch (err3) {
+                                    console.warn('❌ Sign(signer, false) не сработал:', err3.message || err3);
+                                    throw new Error('Не удалось создать подпись ни одним способом');
+                                }
+                            }
+                        }
+
+                        if (!signature) throw new Error('Подпись не получена');
+
+                        console.log('✅ Подпись создана, длина:', signature.length);
+
+                        // 11. Отправить подпись
+                        const signResponse = yield fetch('/api/v1/proxy/auth-simple-sign-in', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ keyId: uuid, signature })
+                        });
+                        if (!signResponse.ok) {
+                            const errText = yield signResponse.text();
+                            throw new Error(`Ошибка авторизации: ${signResponse.status} - ${errText}`);
+                        }
+                        const tokenData = yield signResponse.json();
+                        const authToken = tokenData.token;
+                        if (!authToken) throw new Error('Сервер не вернул токен');
+                        console.log('✅ Токен получен');
+                        resolve(authToken);
+                    } catch (err) {
+                        console.error('❌ Ошибка в async_spawn:', err);
+                        reject(err);
+                    }
+                });
             });
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Ошибка получения ключа: ${response.status} - ${errorText}`);
-            }
-            const data = await response.json();
-            return data;
-        } catch (e) {
-            statusDiv.innerHTML = `<div class="alert alert-danger">Ошибка запроса /auth/key: ${e.message}</div>`;
-            return null;
-        }
-    }
 
-    async function signData(data) {
-        try {
-            const signature = await pluginer.sign(
-                data,
-                certificate.serialNumber,
-                'base64'
-            );
-            return signature;
-        } catch (e) {
-            statusDiv.innerHTML = `<div class="alert alert-danger">Ошибка подписания: ${e.message}</div>`;
-            return null;
-        }
-    }
-
-    async function sendSignIn(uuid, signedData, inn = null) {
-        try {
-            const payload = {
-                uuid: uuid,
-                data: signedData,
-                unitedToken: false
-            };
-            if (inn) payload.inn = inn;
-
-            const response = await fetch('/api/v1/proxy/auth-simple-sign-in', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Ошибка аутентификации: ${response.status} - ${errorText}`);
-            }
-            const result = await response.json();
-            return result.token;
-        } catch (e) {
-            statusDiv.innerHTML = `<div class="alert alert-danger">Ошибка получения токена: ${e.message}</div>`;
-            return null;
-        }
-    }
-
-    async function saveTokenOnServer(token) {
-        try {
-            const response = await fetch('/api/v1/auth/set-cz-token', {
+            setStatus('Сохранение токена...');
+            const saveResponse = await fetch('/api/v1/auth/set-cz-token', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token: token })
             });
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Ошибка сохранения токена: ${response.status} - ${errorText}`);
+            if (!saveResponse.ok) {
+                const errData = await saveResponse.json();
+                throw new Error(`Ошибка сохранения токена: ${errData.detail || saveResponse.statusText}`);
             }
-            const result = await response.json();
-            return result;
-        } catch (e) {
-            statusDiv.innerHTML = `<div class="alert alert-danger">Ошибка сохранения токена на сервере: ${e.message}</div>`;
-            return null;
+
+            setResult('✅ Токен успешно получен и сохранён!');
+            setStatus('Готово');
+            setTimeout(() => window.location.reload(), 1500);
+
+        } catch (error) {
+            console.error('❌ Ошибка получения токена:', error);
+            setStatus('Ошибка: ' + error.message, true);
+            setResult('❌ ' + error.message, true);
         }
     }
 
-    btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        btn.textContent = 'Выполняется...';
-        statusDiv.innerHTML = '';
-        resultDiv.innerHTML = '';
-
-        try {
-            const initOk = await initPluginer();
-            if (!initOk) return;
-
-            const cert = await getCertificate();
-            if (!cert) return;
-
-            const keyData = await getAuthKey();
-            if (!keyData) return;
-            const { uuid, data } = keyData;
-
-            statusDiv.innerHTML = `<div class="alert alert-info">Подписываем данные...</div>`;
-            const signedData = await signData(data);
-            if (!signedData) return;
-
-            statusDiv.innerHTML = `<div class="alert alert-info">Получаем токен...</div>`;
-            const token = await sendSignIn(uuid, signedData);
-            if (!token) return;
-
-            statusDiv.innerHTML = `<div class="alert alert-success">Токен получен. Сохраняем...</div>`;
-            const saveResult = await saveTokenOnServer(token);
-            if (saveResult) {
-                resultDiv.innerHTML = `<div class="alert alert-success">Токен успешно сохранён! Страница будет обновлена...</div>`;
-                // Обновляем страницу через 2 секунды, чтобы показать актуальный статус
-                setTimeout(() => location.reload(), 2000);
-            }
-        } catch (e) {
-            statusDiv.innerHTML = `<div class="alert alert-danger">Ошибка: ${e.message}</div>`;
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Получить токен';
-        }
-    });
-});
+    getTokenBtn.addEventListener('click', getCzToken);
+})();

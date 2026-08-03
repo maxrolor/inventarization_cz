@@ -10,15 +10,12 @@ from contextlib import asynccontextmanager
 from app.core.logging_config import setup_logging
 from app.celery_tasks.celery_app import celery_app
 
-
-
 setup_logging()
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Запуск приложения...")
-    logger.info("Приложение запущено. База данных будет проверена через интерфейс.")
     yield
     logger.info("Завершение работы приложения")
 
@@ -34,6 +31,7 @@ from app.api.v1.clients import router as clients_router
 from app.api.v1.pages import router as pages_router
 from app.api.v1.db_admin import router as db_admin_router
 from app.api.v1.client_auth import router as client_auth_router
+from app.api.v1.proxy import router as proxy_router   # <-- добавлен импорт прокси
 
 # Подключение роутеров
 app.include_router(auth_router)
@@ -41,9 +39,10 @@ app.include_router(clients_router)
 app.include_router(pages_router)
 app.include_router(db_admin_router)
 app.include_router(client_auth_router)
+app.include_router(proxy_router)   # <-- добавлено подключение
 
-static_dir = os.path.join(os.path.dirname(__file__), "static")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Монтируем статику из папки app/static
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 @app.get("/")
 async def root():
