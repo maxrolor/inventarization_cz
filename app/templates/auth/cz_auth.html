@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Получение токена Честного знака{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4>Авторизация в Честном знаке</h4>
+                </div>
+                <div class="card-body">
+                    <!-- Статус текущего токена -->
+                    <div id="tokenStatus" class="mb-3">
+                        {% if has_token %}
+                            <div class="alert alert-success">
+                                Токен уже получен.
+                                {% if expires %}
+                                    <br><small>Действителен до: {{ expires }}</small>
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <div class="alert alert-warning">
+                                Токен не получен. Для работы с маркировкой необходимо авторизоваться.
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <p>Нажмите кнопку ниже, выберите сертификат и подтвердите подпись.</p>
+                    <button id="getTokenBtn" class="btn btn-primary btn-lg">Получить токен</button>
+                    <div id="status" class="mt-3"></div>
+                    <div id="result" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    if (typeof window.safari === 'undefined') {
+        window.safari = {};
+    }
+</script>
+<script src="/static/js/cades-pluginer.bundle.js"></script>
+<script src="/static/js/cz_auth.js"></script>
+{% endblock %}

@@ -17,6 +17,7 @@ from app.services.device_service import (
     verify_verification_code,
     confirm_device
 )
+from app.services.token_service import TokenService
 import logging
 import random
 from datetime import datetime, timedelta, timezone

@@ -1,12 +1,16 @@
+import logging
+import os
 from fastapi import FastAPI, Request, status, Depends
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from app.core.dependencies import get_current_user
 from app.models.user import User, UserRole
 from contextlib import asynccontextmanager
 from app.core.logging_config import setup_logging
 from app.celery_tasks.celery_app import celery_app
-import logging
+
+
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -37,6 +41,9 @@ app.include_router(clients_router)
 app.include_router(pages_router)
 app.include_router(db_admin_router)
 app.include_router(client_auth_router)
+
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
 async def root():

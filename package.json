@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@crpt/cades-pluginer": "^0.0.1"
+  }
+}
