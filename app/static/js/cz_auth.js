@@ -17,28 +17,6 @@
         resultDiv.innerHTML = `<div class="alert ${err ? 'alert-danger' : 'alert-success'}">${msg}</div>`;
     }
 
-    function logObjectMethods(obj, name) {
-        console.log(`📌 Доступные свойства/методы объекта ${name}:`);
-        const props = Object.getOwnPropertyNames(obj);
-        for (let p of props) {
-            if (typeof obj[p] === 'function') {
-                console.log(`  ${p}()`);
-            } else {
-                console.log(`  ${p}: ${obj[p]}`);
-            }
-        }
-        let proto = Object.getPrototypeOf(obj);
-        while (proto && proto !== Object.prototype) {
-            const protoProps = Object.getOwnPropertyNames(proto);
-            for (let p of protoProps) {
-                if (typeof proto[p] === 'function' && !props.includes(p)) {
-                    console.log(`  (prototype) ${p}()`);
-                }
-            }
-            proto = Object.getPrototypeOf(proto);
-        }
-    }
-
     async function getCzToken() {
         setStatus('Инициализация плагина...');
         setResult('');
@@ -79,10 +57,10 @@
                         console.log('📊 data:', data);
 
                         // 2. Открыть хранилище
-                        const store = yield window.cadesplugin.CreateObjectAsync('CAdESCOM.Store');
-                        yield store.Open(2, 'My', 0);
+                        const store = yield cadesplugin.CreateObjectAsync('CAdESCOM.Store');
+                        yield store.Open(cadesplugin.CAPICOM_CURRENT_USER_STORE, cadesplugin.CAPICOM_MY_STORE,
+                            cadesplugin.CAPICOM_STORE_OPEN_MAXIMUM_ALLOWED);
 
-                        // 3. Найти сертификат с закрытым ключом
                         const certs = yield store.Certificates;
                         const count = yield certs.Count;
                         let cert = null;
@@ -99,111 +77,36 @@
                         }
                         console.log('✅ Сертификат выбран:', yield cert.SubjectName);
 
-                        // 4. Создать подписанта и установить алгоритм
-                        const signer = yield window.cadesplugin.CreateObjectAsync('CAdESCOM.CPSigner');
-                        // Установка сертификата
-                        if (typeof signer.propset_Certificate === 'function') {
-                            yield signer.propset_Certificate(cert);
-                        } else if (typeof signer.put_Certificate === 'function') {
-                            yield signer.put_Certificate(cert);
-                        } else {
-                            signer.Certificate = cert;
-                        }
-                        // Алгоритм хеширования: 101 = ГОСТ 2012-256
-                        if (typeof signer.propset_Algorithm === 'function') {
-                            yield signer.propset_Algorithm(101);
-                        } else if (typeof signer.put_Algorithm === 'function') {
-                            yield signer.put_Algorithm(101);
-                        } else {
-                            signer.Algorithm = 101;
-                        }
-                        console.log('🔐 Алгоритм установлен');
+                        // 3. Создать подписанта
+                        const signer = yield cadesplugin.CreateObjectAsync('CAdESCOM.CPSigner');
+                        yield signer.propset_Certificate(cert);
+                        yield signer.propset_CheckCertificate(true);
 
-                        // 5. Создать CadesSignedData
-                        let signedData;
+                        // 4. Создать CadesSignedData (присоединённая подпись)
+                        const signedData = yield cadesplugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
+                        yield signedData.propset_Content(data);
+                        console.log('✍️ Content = data (строка)');
+
+                        // 5. Присоединённая подпись (detached = false)
+                        console.log('🔄 Вызов SignCades (detached = false)...');
+                        let signature;
                         try {
-                            signedData = yield window.cadesplugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
-                        } catch (e) {
-                            signedData = yield window.cadesplugin.CreateObjectAsync('CAdESCOM.SignedData');
-                        }
-                        console.log('✅ SignedData создан');
-
-                        // 6. Логируем доступные методы signedData
-                        logObjectMethods(signedData, 'signedData');
-
-                        // 7. Устанавливаем EncodingType = 0 (Base64)
-                        if (typeof signedData.propset_EncodingType === 'function') {
-                            yield signedData.propset_EncodingType(0);
-                        } else if (typeof signedData.put_EncodingType === 'function') {
-                            yield signedData.put_EncodingType(0);
-                        } else {
-                            signedData.EncodingType = 0;
-                        }
-                        console.log('✅ EncodingType = 0');
-
-                        // 8. Устанавливаем Content
-                        if (typeof signedData.propset_Content === 'function') {
-                            yield signedData.propset_Content(data);
-                        } else if (typeof signedData.put_Content === 'function') {
-                            yield signedData.put_Content(data);
-                        } else {
-                            signedData.Content = data;
-                        }
-                        console.log('✅ Content установлен');
-
-                        // 9. Пробуем установить Options = 0x1 (отключить TSA)
-                        if (typeof signedData.propset_Options === 'function') {
-                            yield signedData.propset_Options(0x1);
-                            console.log('✅ Options установлен через propset_Options = 0x1');
-                        } else if (typeof signedData.put_Options === 'function') {
-                            yield signedData.put_Options(0x1);
-                            console.log('✅ Options установлен через put_Options = 0x1');
-                        } else if (typeof signedData.set_Options === 'function') {
-                            yield signedData.set_Options(0x1);
-                            console.log('✅ Options установлен через set_Options = 0x1');
-                        } else {
-                            try {
-                                signedData.Options = 0x1;
-                                console.log('✅ Options установлен напрямую = 0x1');
-                            } catch (e) {
-                                console.warn('Не удалось установить Options:', e);
-                            }
-                        }
-
-                        // 10. Пробуем подписать
-                        console.log('🔄 Вызов signedData.Sign(signer, false, 0)');
-                        let signature = null;
-                        try {
-                            signature = yield signedData.Sign(signer, false, 0);
-                            console.log('✅ Подпись создана через Sign(signer, false, 0)');
+                            signature = yield signedData.SignCades(signer, cadesplugin.CADESCOM_CADES_BES, false);
                         } catch (err) {
-                            console.warn('❌ Sign(signer, false, 0) не сработал:', err.message || err);
-                            try {
-                                console.log('🔄 Пробуем signedData.Sign(signer, true, 0)');
-                                signature = yield signedData.Sign(signer, true, 0);
-                                console.log('✅ Подпись создана через Sign(signer, true, 0)');
-                            } catch (err2) {
-                                console.warn('❌ Sign(signer, true, 0) не сработал:', err2.message || err2);
-                                try {
-                                    console.log('🔄 Пробуем signedData.Sign(signer, false)');
-                                    signature = yield signedData.Sign(signer, false);
-                                    console.log('✅ Подпись создана через Sign(signer, false)');
-                                } catch (err3) {
-                                    console.warn('❌ Sign(signer, false) не сработал:', err3.message || err3);
-                                    throw new Error('Не удалось создать подпись ни одним способом');
-                                }
-                            }
+                            const e = cadesplugin.getLastError(err);
+                            console.error('Ошибка при создании подписи:', e);
+                            throw new Error('Не удалось создать подпись: ' + e);
                         }
-
-                        if (!signature) throw new Error('Подпись не получена');
-
                         console.log('✅ Подпись создана, длина:', signature.length);
 
-                        // 11. Отправить подпись
+                        // 6. Отправить подпись
                         const signResponse = yield fetch('/api/v1/proxy/auth-simple-sign-in', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ keyId: uuid, signature })
+                            body: JSON.stringify({
+                                uuid: uuid,
+                                data: signature
+                            })
                         });
                         if (!signResponse.ok) {
                             const errText = yield signResponse.text();
@@ -222,15 +125,24 @@
             });
 
             setStatus('Сохранение токена...');
-            const saveResponse = await fetch('/api/v1/auth/set-cz-token', {
+            // Исправленный путь (без /api/v1)
+            const saveResponse = await fetch('/auth/set-cz-token', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token: token })
             });
             if (!saveResponse.ok) {
-                const errData = await saveResponse.json();
-                throw new Error(`Ошибка сохранения токена: ${errData.detail || saveResponse.statusText}`);
+                let errText;
+                try {
+                    const errData = await saveResponse.json();
+                    errText = errData.detail || saveResponse.statusText;
+                } catch (e) {
+                    errText = await saveResponse.text();
+                }
+                throw new Error(`Ошибка сохранения токена: ${saveResponse.status} - ${errText}`);
             }
+            const saveResult = await saveResponse.json();
+            console.log('✅ Токен сохранён:', saveResult);
 
             setResult('✅ Токен успешно получен и сохранён!');
             setStatus('Готово');
