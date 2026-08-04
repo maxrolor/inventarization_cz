@@ -14,6 +14,7 @@ from app.services.inn_parser import INNParser
 from app.services.address_service import suggest_addresses
 from app.services.email_service import send_confirmation_email
 from app.core.dependencies import get_current_client
+from app.services.token_service import TokenService
 import logging
 from datetime import date
 import secrets
@@ -276,4 +277,30 @@ async def update_client_profile(
         "email": client.email,
         "addresses": addresses,
         "message": "Профиль обновлён"
+    }
+
+# ---- Работа с токеном Честного знака ----
+@router.get("/cz-token-status")
+async def get_cz_token_status(
+    current_user: User = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Проверка наличия и срока действия токена Честного знака для текущего клиента.
+    """
+    client_id = current_user.client_id
+    if not client_id:
+        raise HTTPException(status_code=400, detail="У пользователя нет привязанного клиента")
+
+    token = await TokenService.get_cz_token(client_id, db)
+    has_token = token is not None
+
+    # Получаем клиента для проверки срока
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
+    expires_at = client.cz_token_expires if client else None
+
+    return {
+        "has_token": has_token,
+        "expires_at": expires_at.isoformat() if expires_at else None,
     }

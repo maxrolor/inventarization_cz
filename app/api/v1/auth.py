@@ -296,14 +296,15 @@ async def set_cz_token(
         raise HTTPException(status_code=404, detail=str(e))
     return {"status": "ok", "message": "Токен сохранён"}
 
+"""
 @router.get("/cz-token-status")
 async def cz_token_status(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Возвращает статус токена для организации пользователя.
-    """
+    
+    #Возвращает статус токена для организации пользователя.
+    
     if not current_user.client_id:
         return {"has_token": False, "expires": None}
     client = await db.get(Client, current_user.client_id)
@@ -313,3 +314,4 @@ async def cz_token_status(
         "has_token": has_token,
         "expires": expires,
     }
+"""

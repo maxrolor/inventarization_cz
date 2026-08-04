@@ -25,21 +25,29 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Импорт роутеров
+# Импорт роутеров (все префиксы заданы внутри роутеров, кроме новых)
 from app.api.v1.auth import router as auth_router
 from app.api.v1.clients import router as clients_router
 from app.api.v1.pages import router as pages_router
 from app.api.v1.db_admin import router as db_admin_router
 from app.api.v1.client_auth import router as client_auth_router
-from app.api.v1.proxy import router as proxy_router   # <-- добавлен импорт прокси
+from app.api.v1.proxy import router as proxy_router
+from app.api.v1.inventory import router as inventory_router
+from app.api.v1.balances import router as balances_router
+from app.api.v1.marks import router as marks_router
 
-# Подключение роутеров
-app.include_router(auth_router)
-app.include_router(clients_router)
-app.include_router(pages_router)
-app.include_router(db_admin_router)
-app.include_router(client_auth_router)
-app.include_router(proxy_router)   # <-- добавлено подключение
+# Подключение роутеров (без лишних префиксов, т.к. они уже заданы внутри)
+app.include_router(auth_router)          # внутри prefix="/auth"
+app.include_router(clients_router)       # внутри prefix="/clients"
+app.include_router(pages_router)         # внутри prefix="/pages"
+app.include_router(db_admin_router)      # внутри prefix="/db-admin"
+app.include_router(client_auth_router)   # внутри prefix="/client"
+app.include_router(proxy_router)         # внутри prefix="/api/v1/proxy"
+
+# Новые роутеры – добавляем префиксы, чтобы избежать конфликтов
+app.include_router(inventory_router, prefix="/inventory")
+app.include_router(balances_router, prefix="/balances")
+app.include_router(marks_router, prefix="/marks")
 
 # Монтируем статику из папки app/static
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
